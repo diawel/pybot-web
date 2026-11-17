@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PyBot — ブラウザで動く、重みなしチャットボット</title>
-<meta name="description" content="重みなし・訓練なし、純粋なPythonのルールだけでできたチャットボット PyBot を、Pyodide (WebAssembly) でブラウザの中だけで動かす非公式デモ。">
+<title>PyBot — a chatbot with no weights, running in your browser</title>
+<meta name="description" content="Unofficial browser demo of PyBot: a chatbot written in plain Python — no weights, no training, just rules — running entirely in your browser via Pyodide (WebAssembly).">
 <style>
   :root {
     --bg: #0b0e14; --panel: #12161f; --panel2: #171c28; --line: #232a3a;
@@ -28,6 +28,12 @@
   .sub { color: var(--dim); font-size: 13px; margin-top: 6px; line-height: 1.7; }
   .sub a, footer a { color: var(--accent); text-decoration: none; }
   .sub a:hover, footer a:hover { text-decoration: underline; }
+  .ghlink { margin-top: 10px; font-size: 13px; }
+  .ghlink a {
+    color: var(--text); border: 1px solid var(--line); background: var(--panel2);
+    border-radius: 99px; padding: 6px 14px; text-decoration: none; display: inline-block;
+  }
+  .ghlink a:hover { border-color: var(--accent); }
 
   #loader {
     background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
@@ -83,12 +89,12 @@
 /_/    \__, /_____/\____/\__/
       /____/</pre>
     <div class="tagline">A chatbot written in plain Python. No weights, no training, just rules.</div>
-    <p class="sub">重みなし・訓練なし。if-else と正規表現とルックアップテーブルだけで書かれた約64万行のチャットボット PyBot が、<br>
-    サーバーを使わず <strong>あなたのブラウザの中だけ</strong> で動きます（Pyodide / WebAssembly）。</p>
+    <p class="sub">An <strong>unofficial</strong> browser demo. PyBot — about 640,000 lines of if-else, regex and lookup tables — runs <strong>entirely in your browser</strong> via Pyodide (WebAssembly). No server is involved.</p>
+    <div class="ghlink"><a href="https://github.com/diawel/pybot-web">How it works — source on GitHub</a></div>
   </header>
 
   <div id="loader">
-    <div class="stage" id="stageText">準備しています…</div>
+    <div class="stage" id="stageText">Preparing…</div>
     <div class="detail" id="stageDetail">starting</div>
     <div class="bar" id="bar"><div id="barFill"></div></div>
   </div>
@@ -103,16 +109,16 @@
   </div>
 
   <form id="composer">
-    <input id="input" type="text" placeholder="英語で話しかけてみてください（例: hello）" autocomplete="off">
-    <button id="send" type="submit">送信</button>
-    <button id="reset" type="button">リセット</button>
+    <input id="input" type="text" placeholder="Talk to PyBot in English (e.g. hello)" autocomplete="off">
+    <button id="send" type="submit">Send</button>
+    <button id="reset" type="button">Reset</button>
   </form>
-  <div class="hint" id="composerHint" style="display:none">PyBot は英語のルールベースです。会話の記憶はこのタブの中だけにあります。</div>
+  <div class="hint" id="composerHint" style="display:none">PyBot is a rule-based bot and speaks English. The conversation memory lives only in this tab.</div>
 
   <footer>
-    PyBot © Hugging Face / HuggingFaceSwarms — <a href="https://github.com/huggingface/pybot">github.com/huggingface/pybot</a>（<a href="LICENSE">Apache License 2.0</a>）。<br>
-    これは有志による非公式のブラウザデモです。オリジナルの Python コードを一切改変せず、Pyodide でそのまま実行しています。入力した文章がサーバーに送信されることはありません。<br>
-    公式のブラウザデモ（サーバー実行版）は <a href="https://huggingface.co/spaces/HuggingFaceSwarms/PyBot">Hugging Face Space</a> で公開されています。
+    PyBot © Hugging Face / HuggingFaceSwarms — <a href="https://github.com/huggingface/pybot">github.com/huggingface/pybot</a> (<a href="LICENSE">Apache License 2.0</a>).<br>
+    This is an unofficial demo: the original Python code runs unmodified, compiled to WebAssembly with Pyodide. Nothing you type is sent to a server.<br>
+    The official browser demo (server-side) is on <a href="https://huggingface.co/spaces/HuggingFaceSwarms/PyBot">Hugging Face Spaces</a>. This demo's own source is at <a href="https://github.com/diawel/pybot-web">github.com/diawel/pybot-web</a>.
   </footer>
 </div>
 
@@ -135,7 +141,7 @@
   var timer = setInterval(function () {
     var s = Math.floor((Date.now() - startedAt) / 1000);
     var el = document.getElementById('elapsed');
-    if (el) el.textContent = s + '秒';
+    if (el) el.textContent = s + 's';
   }, 500);
 
   var lineTimer = null;
@@ -144,7 +150,7 @@
     lineTimer = setInterval(function () {
       lines += Math.floor(4000 + Math.random() * 9000);
       if (lines > 640000) lines = 640000;
-      stageDetail.textContent = 'Pythonコードを読み込んでいます… ' + lines.toLocaleString() + ' / 約640,000行 · 経過 ';
+      stageDetail.textContent = 'Loading Python code… ' + lines.toLocaleString() + ' / ~640,000 lines · elapsed ';
       var span = document.createElement('span'); span.id = 'elapsed';
       stageDetail.appendChild(span);
       if (lines >= 640000) clearInterval(lineTimer);
@@ -153,10 +159,10 @@
   function stopLineCounter() { if (lineTimer) clearInterval(lineTimer); }
 
   var stages = {
-    pyodide: 'Python ランタイム（Pyodide）を読み込んでいます…',
-    download: 'PyBot 本体（zip 約13MB）をダウンロードしています…',
-    unpack: '展開しています…',
-    import: 'モジュールを読み込んでいます（ここが一番かかります）…'
+    pyodide: 'Loading the Python runtime (Pyodide)…',
+    download: 'Downloading PyBot (zip, ~13 MB)…',
+    unpack: 'Unpacking…',
+    import: 'Importing modules (this is the slow part)…'
   };
 
   var worker = new Worker('worker.js');
@@ -178,20 +184,20 @@
       stageText.textContent = stages[d.stage] || d.stage;
       bar.classList.remove('indet');
       if (d.stage === 'download') {
-        stageDetail.textContent = '0 MB / 約13 MB';
+        stageDetail.textContent = '0 MB / ~13 MB';
       } else if (d.stage === 'import') {
         bar.classList.add('indet');
         startLineCounter();
       } else {
         bar.classList.add('indet');
-        stageDetail.textContent = '経過 ';
-        var span = document.createElement('span'); span.id = 'elapsed'; span.textContent = '0秒';
+        stageDetail.textContent = 'elapsed ';
+        var span = document.createElement('span'); span.id = 'elapsed'; span.textContent = '0s';
         stageDetail.appendChild(span);
       }
     } else if (d.type === 'progress') {
       var pct = d.total ? Math.round(d.loaded / d.total * 100) : 0;
       barFill.style.width = pct + '%';
-      stageDetail.textContent = (d.loaded / 1048576).toFixed(1) + ' MB / ' + (d.total ? (d.total / 1048576).toFixed(1) + ' MB' : '約13 MB');
+      stageDetail.textContent = (d.loaded / 1048576).toFixed(1) + ' MB / ' + (d.total ? (d.total / 1048576).toFixed(1) + ' MB' : '~13 MB');
     } else if (d.type === 'reply') {
       removeThinking();
       addBot(d.reply, d.module, d.ms + ' ms');
@@ -204,16 +210,16 @@
       stopLineCounter();
       clearInterval(timer);
       loader.classList.add('error');
-      stageText.textContent = '読み込みに失敗しました';
-      stageDetail.textContent = d.message + ' — 再読み込みしてみてください。';
+      stageText.textContent = 'Failed to load';
+      stageDetail.textContent = d.message + ' — please reload the page.';
     }
   };
   worker.onerror = function (err) {
     stopLineCounter();
     clearInterval(timer);
     loader.classList.add('error');
-    stageText.textContent = '読み込みに失敗しました';
-    stageDetail.textContent = String(err.message || err) + ' — 再読み込みしてみてください。';
+    stageText.textContent = 'Failed to load';
+    stageDetail.textContent = String(err.message || err) + ' — please reload the page.';
   };
 
   function addMsg(text, who) {
