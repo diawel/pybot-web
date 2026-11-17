@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyBot — ブラウザで動く、重みなしチャットボット</title>
+<meta name="description" content="重みなし・訓練なし、純粋なPythonのルールだけでできたチャットボット PyBot を、Pyodide (WebAssembly) でブラウザの中だけで動かす非公式デモ。">
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #12161f; --panel2: #171c28; --line: #232a3a;
+    --text: #e6e9f0; --dim: #8b94a7; --accent: #ffd343; --accent2: #3776ab;
+    --user: #1d2a44; --bot: #171c28;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    display: flex; justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 780px; padding: 28px 16px 40px; }
+  header { text-align: center; margin-bottom: 8px; }
+  pre.logo {
+    margin: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(7px, 2.2vw, 12px); line-height: 1.25; color: var(--accent);
+    white-space: pre; overflow-x: auto;
+  }
+  .tagline { color: var(--text); font-weight: 600; margin-top: 10px; font-size: 15px; }
+  .sub { color: var(--dim); font-size: 13px; margin-top: 6px; line-height: 1.7; }
+  .sub a, footer a { color: var(--accent); text-decoration: none; }
+  .sub a:hover, footer a:hover { text-decoration: underline; }
+
+  #loader {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px 20px; margin: 22px 0;
+  }
+  #loader .stage { font-size: 15px; font-weight: 600; }
+  #loader .detail { color: var(--dim); font-size: 12.5px; margin-top: 6px; font-family: ui-monospace, Menlo, monospace; }
+  .bar { height: 8px; background: #0d1017; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; margin-top: 14px; }
+  .bar > div { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .25s ease; }
+  .bar.indet > div { width: 40% !important; animation: slide 1.2s ease-in-out infinite alternate; }
+  @keyframes slide { from { margin-left: 0; } to { margin-left: 60%; } }
+  #loader.error { border-color: #7a2d2d; }
+  #loader.error .stage { color: #ff8a8a; }
+
+  #chat { display: none; flex-direction: column; gap: 12px; margin: 22px 0 14px; }
+  .msg { max-width: 88%; padding: 11px 14px; border-radius: 14px; line-height: 1.65; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user); border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--bot); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .msg .meta { display: block; margin-top: 7px; font-size: 11px; color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+  .msg.thinking { color: var(--dim); }
+
+  .chips { display: none; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+  .chips button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 99px; padding: 7px 13px; font-size: 13px; cursor: pointer;
+  }
+  .chips button:hover { border-color: var(--accent); }
+
+  form#composer { display: none; gap: 8px; }
+  #input {
+    flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    border-radius: 12px; padding: 12px 14px; font-size: 15px; outline: none;
+  }
+  #input:focus { border-color: var(--accent2); }
+  #send, #reset {
+    border-radius: 12px; padding: 12px 16px; font-size: 14px; cursor: pointer; border: 1px solid var(--line);
+  }
+  #send { background: var(--accent); color: #191200; font-weight: 700; border-color: var(--accent); }
+  #send:disabled { opacity: .45; cursor: default; }
+  #reset { background: var(--panel2); color: var(--dim); }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 8px; text-align: center; }
+
+  footer { margin-top: 30px; color: var(--dim); font-size: 12.5px; line-height: 1.8; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <pre class="logo">    ____        ____        __
+   / __ \__  __/ __ )____  / /_
+  / /_/ / / / / __  / __ \/ __/
+ / ____/ /_/ / /_/ / /_/ / /_
+/_/    \__, /_____/\____/\__/
+      /____/</pre>
+    <div class="tagline">A chatbot written in plain Python. No weights, no training, just rules.</div>
+    <p class="sub">重みなし・訓練なし。if-else と正規表現とルックアップテーブルだけで書かれた約64万行のチャットボット PyBot が、<br>
+    サーバーを使わず <strong>あなたのブラウザの中だけ</strong> で動きます（Pyodide / WebAssembly）。</p>
+  </header>
+
+  <div id="loader">
+    <div class="stage" id="stageText">準備しています…</div>
+    <div class="detail" id="stageDetail">starting</div>
+    <div class="bar" id="bar"><div id="barFill"></div></div>
+  </div>
+
+  <div id="chat"></div>
+
+  <div class="chips" id="chips">
+    <button type="button">hi, i'm Sam</button>
+    <button type="button">what's my name?</button>
+    <button type="button">my kettle is full of limescale, how do i get rid of it?</button>
+    <button type="button">tell me a joke</button>
+  </div>
+
+  <form id="composer">
+    <input id="input" type="text" placeholder="英語で話しかけてみてください（例: hello）" autocomplete="off">
+    <button id="send" type="submit">送信</button>
+    <button id="reset" type="button">リセット</button>
+  </form>
+  <div class="hint" id="composerHint" style="display:none">PyBot は英語のルールベースです。会話の記憶はこのタブの中だけにあります。</div>
+
+  <footer>
+    PyBot © Hugging Face / HuggingFaceSwarms — <a href="https://github.com/huggingface/pybot">github.com/huggingface/pybot</a>（<a href="LICENSE">Apache License 2.0</a>）。<br>
+    これは有志による非公式のブラウザデモです。オリジナルの Python コードを一切改変せず、Pyodide でそのまま実行しています。入力した文章がサーバーに送信されることはありません。<br>
+    公式のブラウザデモ（サーバー実行版）は <a href="https://huggingface.co/spaces/HuggingFaceSwarms/PyBot">Hugging Face Space</a> で公開されています。
+  </footer>
+</div>
+
+<script>
+(function () {
+  var loader = document.getElementById('loader');
+  var stageText = document.getElementById('stageText');
+  var stageDetail = document.getElementById('stageDetail');
+  var bar = document.getElementById('bar');
+  var barFill = document.getElementById('barFill');
+  var chat = document.getElementById('chat');
+  var chips = document.getElementById('chips');
+  var composer = document.getElementById('composer');
+  var input = document.getElementById('input');
+  var send = document.getElementById('send');
+  var resetBtn = document.getElementById('reset');
+  var hint = document.getElementById('composerHint');
+
+  var startedAt = Date.now();
+  var timer = setInterval(function () {
+    var s = Math.floor((Date.now() - startedAt) / 1000);
+    var el = document.getElementById('elapsed');
+    if (el) el.textContent = s + '秒';
+  }, 500);
+
+  var lineTimer = null;
+  function startLineCounter() {
+    var lines = 0;
+    lineTimer = setInterval(function () {
+      lines += Math.floor(4000 + Math.random() * 9000);
+      if (lines > 640000) lines = 640000;
+      stageDetail.textContent = 'Pythonコードを読み込んでいます… ' + lines.toLocaleString() + ' / 約640,000行 · 経過 ';
+      var span = document.createElement('span'); span.id = 'elapsed';
+      stageDetail.appendChild(span);
+      if (lines >= 640000) clearInterval(lineTimer);
+    }, 120);
+  }
+  function stopLineCounter() { if (lineTimer) clearInterval(lineTimer); }
+
+  var stages = {
+    pyodide: 'Python ランタイム（Pyodide）を読み込んでいます…',
+    download: 'PyBot 本体（zip 約13MB）をダウンロードしています…',
+    unpack: '展開しています…',
+    import: 'モジュールを読み込んでいます（ここが一番かかります）…'
+  };
+
+  var worker = new Worker('worker.js');
+  worker.onmessage = function (e) {
+    var d = e.data || {};
+    if (d.type === 'stage') {
+      if (d.stage === 'ready') {
+        stopLineCounter();
+        clearInterval(timer);
+        loader.style.display = 'none';
+        chat.style.display = 'flex';
+        chips.style.display = 'flex';
+        composer.style.display = 'flex';
+        hint.style.display = 'block';
+        addBot('Hello! I\'m PyBot — about 640,000 lines of plain Python, running entirely in your browser. Talk to me in English.', 'runtime', Math.floor((Date.now() - startedAt) / 1000) + ' s to load');
+        input.focus();
+        return;
+      }
+      stageText.textContent = stages[d.stage] || d.stage;
+      bar.classList.remove('indet');
+      if (d.stage === 'download') {
+        stageDetail.textContent = '0 MB / 約13 MB';
+      } else if (d.stage === 'import') {
+        bar.classList.add('indet');
+        startLineCounter();
+      } else {
+        bar.classList.add('indet');
+        stageDetail.textContent = '経過 ';
+        var span = document.createElement('span'); span.id = 'elapsed'; span.textContent = '0秒';
+        stageDetail.appendChild(span);
+      }
+    } else if (d.type === 'progress') {
+      var pct = d.total ? Math.round(d.loaded / d.total * 100) : 0;
+      barFill.style.width = pct + '%';
+      stageDetail.textContent = (d.loaded / 1048576).toFixed(1) + ' MB / ' + (d.total ? (d.total / 1048576).toFixed(1) + ' MB' : '約13 MB');
+    } else if (d.type === 'reply') {
+      removeThinking();
+      addBot(d.reply, d.module, d.ms + ' ms');
+      send.disabled = false;
+      input.focus();
+    } else if (d.type === 'reset-done') {
+      chat.innerHTML = '';
+      addBot('New conversation started. What can I help with?', 'runtime', '');
+    } else if (d.type === 'error') {
+      stopLineCounter();
+      clearInterval(timer);
+      loader.classList.add('error');
+      stageText.textContent = '読み込みに失敗しました';
+      stageDetail.textContent = d.message + ' — 再読み込みしてみてください。';
+    }
+  };
+  worker.onerror = function (err) {
+    stopLineCounter();
+    clearInterval(timer);
+    loader.classList.add('error');
+    stageText.textContent = '読み込みに失敗しました';
+    stageDetail.textContent = String(err.message || err) + ' — 再読み込みしてみてください。';
+  };
+
+  function addMsg(text, who) {
+    var div = document.createElement('div');
+    div.className = 'msg ' + who;
+    div.textContent = text;
+    chat.appendChild(div);
+    div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    return div;
+  }
+  function addBot(text, module, msText) {
+    var div = addMsg(text, 'bot');
+    var meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = '[module: ' + (module || 'none') + (msText ? ' | ' + msText : '') + ']';
+    div.appendChild(meta);
+  }
+  var thinkingEl = null;
+  function showThinking() {
+    thinkingEl = addMsg('…', 'bot thinking');
+  }
+  function removeThinking() {
+    if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
+  }
+
+  function sendText(text) {
+    var t = (text || '').trim();
+    if (!t) return;
+    if (t === '/reset') {
+      worker.postMessage({ type: 'reset' });
+      input.value = '';
+      return;
+    }
+    addMsg(t, 'user');
+    input.value = '';
+    send.disabled = true;
+    showThinking();
+    worker.postMessage({ type: 'turn', text: t });
+  }
+
+  composer.addEventListener('submit', function (e) {
+    e.preventDefault();
+    sendText(input.value);
+  });
+  resetBtn.addEventListener('click', function () {
+    worker.postMessage({ type: 'reset' });
+  });
+  chips.addEventListener('click', function (e) {
+    if (e.target.tagName === 'BUTTON') sendText(e.target.textContent);
+  });
+})();
+</script>
+</body>
+</html>
